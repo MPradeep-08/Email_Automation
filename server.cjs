@@ -70,7 +70,9 @@ db.exec(`
     ticket_count INTEGER DEFAULT 0,
     first_seen TEXT,
     last_seen TEXT,
-    preferred_department TEXT
+    preferred_department TEXT,
+    autopilot_mode TEXT DEFAULT 'DEFAULT',
+    autopilot_until TEXT DEFAULT NULL
   );
 
   CREATE TABLE IF NOT EXISTS audit_logs (
@@ -92,6 +94,24 @@ try {
 } catch (e) {}
 try {
   db.prepare("ALTER TABLE tickets ADD COLUMN confidence REAL").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE sender_profiles ADD COLUMN autopilot_mode TEXT DEFAULT 'DEFAULT'").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE sender_profiles ADD COLUMN autopilot_until TEXT DEFAULT NULL").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE sender_profiles ADD COLUMN autopilot_schedule_enabled INTEGER DEFAULT 0").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE sender_profiles ADD COLUMN autopilot_schedule_start TEXT DEFAULT '00:00'").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE sender_profiles ADD COLUMN autopilot_schedule_end TEXT DEFAULT '23:59'").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE sender_profiles ADD COLUMN autopilot_schedule_days TEXT DEFAULT '1,2,3,4,5,6,0'").run();
 } catch (e) {}
 
 // Concurrency Polling lock to prevent race conditions
@@ -164,6 +184,38 @@ function upsertSenderProfile(senderEmail, extractedName, department) {
     }
   } catch (err) {
     console.error(`❌ [Sender Profile Error] Failed to upsert profile for ${senderEmail}:`, err);
+  }
+}
+
+// Helper to check if current time is within custom autopilot schedule window
+function isWithinAutopilotSchedule(profile, timestamp = new Date()) {
+  if (!profile.autopilot_schedule_enabled) {
+    return true;
+  }
+  
+  const dateObj = new Date(timestamp);
+  // Get day of week in local time: 0 (Sunday) to 6 (Saturday)
+  const currentDay = dateObj.getDay(); 
+  
+  // Convert current time to HH:MM format (local time)
+  const pad = (n) => String(n).padStart(2, '0');
+  const currentTimeStr = `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
+  
+  // Check if currentDay is in active days (comma-separated, e.g. "1,2,3,4,5")
+  const activeDays = (profile.autopilot_schedule_days || '').split(',').map(d => d.trim());
+  if (!activeDays.includes(String(currentDay))) {
+    return false;
+  }
+  
+  const start = profile.autopilot_schedule_start || '00:00';
+  const end = profile.autopilot_schedule_end || '23:59';
+  
+  if (start <= end) {
+    // Standard range: e.g. 09:00 to 17:00
+    return currentTimeStr >= start && currentTimeStr <= end;
+  } else {
+    // Overnight range: e.g. 18:00 to 09:00 (crosses midnight boundary)
+    return currentTimeStr >= start || currentTimeStr <= end;
   }
 }
 
@@ -443,10 +495,58 @@ async function pollInbox() {
       let repliesList = [];
       let autoSent = false;
 
-      // Auto-Send Rule: confidence > 0.90, assigned_department is not Billing, and SMTP credentials exist
-      if (confidence > 0.90 && dept !== 'Billing') {
+      // Auto-Send Evaluation based on Sender Profile Autopilot Rules
+      let shouldAutoSend = false;
+      let ruleReason = "";
+
+      if (profile) {
+        if (profile.autopilot_mode === 'NEVER') {
+          shouldAutoSend = false;
+          ruleReason = "Sender profile has ALWAYS HOLD review rule active.";
+        } else if (profile.autopilot_mode === 'ALWAYS') {
+          let timerActive = false;
+          let tempTimerReason = "";
+          
+          if (!profile.autopilot_until) {
+            timerActive = true;
+            tempTimerReason = "permanent ALWAYS AUTO-SEND autopilot rule active";
+          } else {
+            const isBeforeExpiry = new Date() < new Date(profile.autopilot_until);
+            if (isBeforeExpiry) {
+              timerActive = true;
+              tempTimerReason = `temporary ALWAYS AUTO-SEND autopilot rule active (expires: ${profile.autopilot_until})`;
+            } else {
+              timerActive = false;
+              tempTimerReason = `temporary autopilot rule expired on ${profile.autopilot_until}`;
+            }
+          }
+
+          if (timerActive) {
+            // Rule timer is active, now verify scheduling limits if enabled
+            if (isWithinAutopilotSchedule(profile, new Date())) {
+              shouldAutoSend = true;
+              ruleReason = `Sender profile has ${tempTimerReason} and is within active scheduled hours.`;
+            } else {
+              shouldAutoSend = false;
+              ruleReason = `Sender profile has ${tempTimerReason} but is currently OUTSIDE scheduled hours (Holding for review).`;
+            }
+          } else {
+            // Revert to system default threshold because the ALWAYS rule timer has expired
+            shouldAutoSend = (confidence > 0.90 && dept !== 'Billing');
+            ruleReason = `Sender profile ${tempTimerReason}. Reverted to system default confidence thresholds (confidence: ${confidence}, dept: ${dept}).`;
+          }
+        } else {
+          shouldAutoSend = (confidence > 0.90 && dept !== 'Billing');
+          ruleReason = `System default auto-send limits (confidence: ${confidence}, dept: ${dept}).`;
+        }
+      } else {
+        shouldAutoSend = (confidence > 0.90 && dept !== 'Billing');
+        ruleReason = `New sender. System default auto-send limits (confidence: ${confidence}, dept: ${dept}).`;
+      }
+
+      if (shouldAutoSend) {
         try {
-          console.log(`🚀 [Auto-Send] Confidence (${confidence}) > 0.90 for ticket ${ticketId}. Sending automatic reply...`);
+          console.log(`🚀 [Auto-Send] ${ruleReason} Sending autopilot SMTP reply for ticket ${ticketId}...`);
           await sendEmailSMTP(senderEmail, subject, suggestedReply);
           status = 'Sent';
           repliesList.push({
@@ -653,9 +753,59 @@ app.post('/api/tickets/mock', async (req, res) => {
   let repliesList = [];
   let autoSent = false;
 
-  if (confidence > 0.90 && dept !== 'Billing') {
+  // Retrieve sender profile for autopilot settings check in mock hook
+  const mockProfile = db.prepare('SELECT * FROM sender_profiles WHERE sender_email = ?').get(senderEmail);
+  let shouldAutoSendMock = false;
+  let mockRuleReason = "";
+
+  if (mockProfile) {
+    if (mockProfile.autopilot_mode === 'NEVER') {
+      shouldAutoSendMock = false;
+      mockRuleReason = "Sender profile has ALWAYS HOLD review rule active.";
+    } else if (mockProfile.autopilot_mode === 'ALWAYS') {
+      let timerActive = false;
+      let tempTimerReason = "";
+      
+      if (!mockProfile.autopilot_until) {
+        timerActive = true;
+        tempTimerReason = "permanent ALWAYS AUTO-SEND autopilot rule active";
+      } else {
+        const isBeforeExpiry = new Date() < new Date(mockProfile.autopilot_until);
+        if (isBeforeExpiry) {
+          timerActive = true;
+          tempTimerReason = `temporary ALWAYS AUTO-SEND autopilot rule active (expires: ${mockProfile.autopilot_until})`;
+        } else {
+          timerActive = false;
+          tempTimerReason = `temporary autopilot rule expired on ${mockProfile.autopilot_until}`;
+        }
+      }
+
+      if (timerActive) {
+        // Rule timer is active, now verify scheduling limits if enabled
+        if (isWithinAutopilotSchedule(mockProfile, new Date())) {
+          shouldAutoSendMock = true;
+          mockRuleReason = `Sender profile has ${tempTimerReason} and is within active scheduled hours.`;
+        } else {
+          shouldAutoSendMock = false;
+          mockRuleReason = `Sender profile has ${tempTimerReason} but is currently OUTSIDE scheduled hours (Holding for review).`;
+        }
+      } else {
+        // Revert to system default threshold because the ALWAYS rule timer has expired
+        shouldAutoSendMock = (confidence > 0.90 && dept !== 'Billing');
+        mockRuleReason = `Sender profile ${tempTimerReason}. Reverted to system default confidence thresholds (confidence: ${confidence}, dept: ${dept}).`;
+      }
+    } else {
+      shouldAutoSendMock = (confidence > 0.90 && dept !== 'Billing');
+      mockRuleReason = `System default auto-send limits (confidence: ${confidence}, dept: ${dept}).`;
+    }
+  } else {
+    shouldAutoSendMock = (confidence > 0.90 && dept !== 'Billing');
+    mockRuleReason = `New sender. System default auto-send limits (confidence: ${confidence}, dept: ${dept}).`;
+  }
+
+  if (shouldAutoSendMock) {
     try {
-      console.log(`🚀 [Auto-Send] [MOCK] Confidence (${confidence}) > 0.90 for ticket ${ticketId}. Sending automatic reply...`);
+      console.log(`🚀 [Auto-Send] [MOCK] ${mockRuleReason} Sending automatic reply...`);
       await sendEmailSMTP(senderEmail, subject, suggestedReply);
       status = 'Sent';
       repliesList.push({
@@ -831,6 +981,143 @@ app.get('/api/tickets/:id/audit', (req, res) => {
   try {
     const logs = db.prepare('SELECT * FROM audit_logs WHERE ticket_id = ? ORDER BY created_at ASC').all(id);
     res.json({ logs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/senders - Retrieve sender profiles for Contacts CRM
+app.get('/api/senders', (req, res) => {
+  try {
+    const senders = db.prepare('SELECT * FROM sender_profiles ORDER BY ticket_count DESC').all();
+    const sendersWithTickets = senders.map(s => {
+      const tickets = db.prepare('SELECT id, timestamp, email_subject, assigned_department, status FROM tickets WHERE sender_email = ? ORDER BY timestamp DESC').all(s.sender_email);
+      return {
+        ...s,
+        tickets
+      };
+    });
+    res.json({ senders: sendersWithTickets });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/senders/:email/autopilot - Update custom sender autopilot rule
+app.post('/api/senders/:email/autopilot', (req, res) => {
+  const { email } = req.params;
+  const { 
+    mode, 
+    durationHours, 
+    customUntil, 
+    scheduleEnabled, 
+    scheduleStart, 
+    scheduleEnd, 
+    scheduleDays 
+  } = req.body;
+
+  try {
+    const profile = db.prepare('SELECT * FROM sender_profiles WHERE sender_email = ?').get(email);
+    if (!profile) {
+      return res.status(404).json({ error: "Sender profile not found" });
+    }
+
+    let until = null;
+    if (mode === 'ALWAYS') {
+      if (durationHours !== undefined && durationHours !== null) {
+        const now = new Date();
+        now.setHours(now.getHours() + parseInt(durationHours));
+        until = now.toISOString();
+      } else if (customUntil) {
+        until = new Date(customUntil).toISOString();
+      }
+    }
+
+    db.prepare(`
+      UPDATE sender_profiles 
+      SET autopilot_mode = ?, 
+          autopilot_until = ?, 
+          autopilot_schedule_enabled = ?, 
+          autopilot_schedule_start = ?, 
+          autopilot_schedule_end = ?, 
+          autopilot_schedule_days = ? 
+      WHERE sender_email = ?
+    `).run(
+      mode, 
+      until, 
+      scheduleEnabled ? 1 : 0, 
+      scheduleStart || '00:00', 
+      scheduleEnd || '23:59', 
+      scheduleDays || '1,2,3,4,5,6,0', 
+      email
+    );
+
+    res.json({ 
+      success: true, 
+      email, 
+      autopilot_mode: mode, 
+      autopilot_until: until,
+      autopilot_schedule_enabled: scheduleEnabled ? 1 : 0,
+      autopilot_schedule_start: scheduleStart || '00:00',
+      autopilot_schedule_end: scheduleEnd || '23:59',
+      autopilot_schedule_days: scheduleDays || '1,2,3,4,5,6,0'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/analytics - Aggregate SaaS metrics and statistics
+app.get('/api/analytics', (req, res) => {
+  try {
+    const totalCount = db.prepare('SELECT COUNT(*) as count FROM tickets').get().count;
+    const pendingCount = db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'Pending Review'").get().count;
+    const sentCount = db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'Sent'").get().count;
+    const ignoredCount = db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status = 'Ignored'").get().count;
+
+    const autoSentCount = db.prepare(`
+      SELECT COUNT(DISTINCT ticket_id) as count 
+      FROM audit_logs 
+      WHERE action = 'Approved' AND actor = 'System'
+    `).get().count;
+
+    const avgConfidenceRow = db.prepare('SELECT AVG(confidence) as avg FROM tickets WHERE confidence IS NOT NULL AND confidence > 0').get();
+    const avgConfidence = avgConfidenceRow.avg ? parseFloat(avgConfidenceRow.avg.toFixed(4)) : 0.0;
+
+    // Department distribution
+    const depts = db.prepare('SELECT assigned_department, COUNT(*) as count FROM tickets GROUP BY assigned_department').all();
+    const departmentDistribution = {
+      'HR/Internship': 0,
+      'Billing': 0,
+      'Technical': 0,
+      'General': 0
+    };
+    depts.forEach(d => {
+      if (d.assigned_department in departmentDistribution) {
+        departmentDistribution[d.assigned_department] = d.count;
+      }
+    });
+
+    // Attachment storage count
+    const allTickets = db.prepare('SELECT attachments FROM tickets').all();
+    let totalAttachmentsCount = 0;
+    allTickets.forEach(t => {
+      try {
+        const atts = JSON.parse(t.attachments || '[]');
+        totalAttachmentsCount += atts.length;
+      } catch (e) {}
+    });
+
+    res.json({
+      totalCount,
+      pendingCount,
+      sentCount,
+      ignoredCount,
+      autoSentCount,
+      avgConfidence,
+      departmentDistribution,
+      totalAttachmentsCount
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

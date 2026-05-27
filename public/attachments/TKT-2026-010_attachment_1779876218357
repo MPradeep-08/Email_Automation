@@ -1,0 +1,50 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20251104; t=1779876208; x=1780481008; darn=example.com;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:from:to:cc:subject:date:message-id:reply-to;
+        bh=eFbKFpYVfEM7jiVjQM1rQKfcD+b8Qe+m9PCI/ytX/sg=;
+        b=MbEeFq3cUt9v/bE2O0+wmjuhfjTn7i24tT3kuRWhnA1kJOSSb0KC5wS9BVrSfYymAi
+         TUM8usGSUXH1YIJWc9iEt8i2KM/Pr82UVcT9Q3n2JXZWzIGcBhTu7kdy9acpQMxSCsdc
+         jS/vRsNHrY844GEkKcrH+YHrUq5yae+glEOML80OhwudN8chuvgbWHOzaf1QNKZ/wVnq
+         kOcZKZItLhb26wjI9R3VBUsKG1vpfFWzHOdRXhZy/0w4Y1azX/i8x2NdYkGfPQVWV2/P
+         OD0aHBVGMXhpJxzB1xFgb2ew9z2Jev9IDp0D/0I1gmlaD6rEsUNOmZy5KUa17c5yWClk
+         spzg==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1779876208; x=1780481008;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:x-gm-gg:x-gm-message-state:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=eFbKFpYVfEM7jiVjQM1rQKfcD+b8Qe+m9PCI/ytX/sg=;
+        b=QYpnifeMyuFMusMGHgCdSePie90LhSI1+moNFFZNJuFz7As5QylpHG7cZ5kcgZieMa
+         qkw6yi5HaX1J8/T6nvLE6CoNA/Hy59tbuL3Q277VYnpT1Mhxi8cf4uvA0r7bvMAY6lAi
+         vyO+WlESGo7sdu4m9m6B1Eb6OTMBOdpzv42BuOv1+FpiWaM7Cp8WwQcTCIYXGXQB9B5j
+         yTEVE8E7v3Icsxn6qXbidZIUxJrCeODWkfrVFqCAPuJK9XZ1jcxi9LTtjIOD7peQtBP3
+         6cYNNQb3zO4MKbC6vKZdkIA2sycDygPTPw0lQKKpI89oHCu+VY1cecgx8rUz5RV3f2Zw
+         d6og==
+X-Gm-Message-State: AOJu0YySLysNqpg97dVIADcZYivtVWcsxBO/2nQkjFLxV5X/Rj/znYF+
+	KwDPWfTb1/tC32NjMqhnjs02ekomvm6Fqjj+gTojA59+H3TDo/PtrNdD1+/Q/ZA5
+X-Gm-Gg: Acq92OFLCBhQm1sxMKiXfDtdG+RL9fL4ec6WeBFj4kOukQr5SZg6WHSjSWSod/zJwoH
+	OZeQnUd6GK+ecenPd2sM7uCBYfGNUS3px1C9cnI45DIyB23gh0v7tg8pEtkcUYeos5WEYs0GRUb
+	//yejhFwU2X2Ft4ehhcKYYPIwitLgLe7+vetMDWuNA3L/tImZ61fWLDIeC4ElSDuPanNjKJG9jE
+	1Nm7IrJNuVg4RiVtN7lhaT3Qvun1Q8ul/39BI0LcpXDpVi9XFAt1QLlS4wuQSEfbLXWdkd9LI89
+	9kIdtuJ5ZuhFjStGrjbmjRfeY1VQq0H5WjwLP9P6KKIis0AOb0KjzEXLEsIwEw8CEwtJ+CjoEtV
+	6alh/WfbQ4yxiZFnwPpanFFpPnL+jufcnjb7pdY0oGU2J1Lx6B+9SriRgQxfsN3e161VsV3RvSY
+	LV+V4zjPywGn6CKukKSmt2SI9eVD03eKnLrjxctJGFGf2mpY4HaqN5aLBk9BCVihKEfZWq5zvLC
+	aBbgVUnt9HF
+X-Received: by 2002:a05:6a20:ce44:b0:3a3:56db:919c with SMTP id adf61e73a8af0-3b328c988c7mr20483568637.14.1779876208095;
+        Wed, 27 May 2026 03:03:28 -0700 (PDT)
+Return-Path: <caldiminternship@gmail.com>
+Received: from [127.0.0.1] ([103.82.211.223])
+        by smtp.gmail.com with ESMTPSA id d2e1a72fcca58-841d6eb0313sm2584439b3a.13.2026.05.27.03.03.26
+        for <john.doe@example.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Wed, 27 May 2026 03:03:27 -0700 (PDT)
+From: caldiminternship@gmail.com
+To: john.doe@example.com
+Subject: Re: Application for software internship
+Message-ID: <c8e62a94-f19f-a451-40d0-ea7dd2f271e3@gmail.com>
+Content-Transfer-Encoding: quoted-printable
+Date: Wed, 27 May 2026 10:03:25 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+

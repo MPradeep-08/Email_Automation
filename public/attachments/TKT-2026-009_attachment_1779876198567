@@ -1,0 +1,50 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20251104; t=1779876184; x=1780480984; darn=example.com;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:from:to:cc:subject:date:message-id:reply-to;
+        bh=CuulbhR0xpYGbZZHNPuekuSWhP8/VVtESFnDtK3LB6c=;
+        b=G8rKWACEF6FaSMj3fi5WILDFaUtBMbTEIlctYDa8k0CmcQNq+sbait0S8xP/c1uezI
+         KlnxfnH4DKOFDUNpKzLqZ9zwWkJzFbyWvAni8t6slUgeYYpUCEWAIIjH4gngm3qFRWlR
+         ZzToMBxMxXxyB4698vu1CXKRqDFHe9zMeeoe+w5S/3jA+cJ4JhU4N99IwBQAQkuFCEIL
+         +JIF6Isz2baZzdDL+agGFhc/h2U4VUHarnWJQehwDIZ+sZzbluISb2KWD3o0DJ3/I0TD
+         XLvacprzN+bVIjpvqEjuVfrMyjYPIfEEBL0GAlflHclQ9GKyhC5CUb7E3BU1YHGtnuUB
+         rRtQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1779876184; x=1780480984;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:x-gm-gg:x-gm-message-state:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=CuulbhR0xpYGbZZHNPuekuSWhP8/VVtESFnDtK3LB6c=;
+        b=MDbwywvrv1+Q8sm8mEZF/VsZ2/71f1unTrFYZF3ikgxaMu2Sx8tSRpnbUihypZLtPT
+         ReFzD8fr9RkgIeFdStCTEFktpMfhhdXb4mRqlfdefLFuFFvJ1Fk7RTInct3JF/ueUrpy
+         NC51lc/VFHKKbMYAEk0MsXdQXr38OwM1rCOQVR0BmhsvBhhPIs+ahS10etqkpUR7r3HT
+         4DuABHxRN7d9i6QN8ZVRUMs+j+7G3xBOY68A8V7Mkpdx5EKQ2HF0TKJ8a00qmdA59L3H
+         0P7P66DQpiIILfEDlzR3WHsEdDX3i8nMV5kqWmwx6XBEpQrOKy8KwUtrYGlne7KfsJSF
+         OCuw==
+X-Gm-Message-State: AOJu0YyzoGfE/S5+Yh4k09+DrVEeGmgRb/2eiqgo/YrLdD2WbkYNJ07/
+	/IJcGDRrWXnDh+//E37F1craOUM5fqbFpDYO7N7LhwfullODHtEc+H+v7lauSot7
+X-Gm-Gg: Acq92OHHO5ovcAzoc2R9CtOy50Ll8QGAF2n74bY7EEVr9JvultutMzRSpALqCcRsDkn
+	AHrXtjfU6J/pxsw6HPHm3LFUJtPZ+lliu1AFLRmP4SFcyhpa6ZOIckRG6JEmSTH5HQQwgviJdId
+	MQFVt5Oyv1bTuFe3OPuvz/I2767h9HDzz+YhKQOGe0DXi6k19wCnX7Kow7Zs/MxUZQYddAGWJBx
+	URJ9nFVznDvp6XzQdI7i2qvFT4JYAXx2tAZ7o+H8zYuBI8XP5wGA4d/xpFGzeKGtCMBK7f+3ktc
+	AkvYlTStDoN3VzQr1XzltjDd5VyudXlApHz89ZJlOIIELL9mM763UHjKJvet4XgtoAqM/HYD2w2
+	+//FQVipd4+r9UxLDWVBIa9mYV88NC+24xc42cJdYkG2dfF1VOXirWxiLU4Avjv5h1l3jpQe/DT
+	oz/0Uv+3hDwNooICJu7mYTum/6/sWO8r0ZeyEoZQPwh8j+aHzIej4EXemz+ewB8CTYexu2qQO17
+	Q==
+X-Received: by 2002:a17:903:15cf:b0:2bd:9c0a:32c with SMTP id d9443c01a7336-2beb0674468mr236362435ad.19.1779876183792;
+        Wed, 27 May 2026 03:03:03 -0700 (PDT)
+Return-Path: <caldiminternship@gmail.com>
+Received: from [127.0.0.1] ([103.82.211.223])
+        by smtp.gmail.com with ESMTPSA id d9443c01a7336-2beb58fef85sm147030245ad.75.2026.05.27.03.03.02
+        for <john.doe@example.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Wed, 27 May 2026 03:03:03 -0700 (PDT)
+From: caldiminternship@gmail.com
+To: john.doe@example.com
+Subject: Re: Query about subscription renewal and charges
+Message-ID: <cd5257f5-1645-8060-5ad2-bdd1498d355c@gmail.com>
+Content-Transfer-Encoding: quoted-printable
+Date: Wed, 27 May 2026 10:03:01 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
