@@ -1,0 +1,50 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20251104; t=1779878490; x=1780483290; darn=example.com;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:from:to:cc:subject:date:message-id:reply-to;
+        bh=qdqmoM1OkQyLdvnI4OT+vmr9+0QhZY9CVzoqJx7+exE=;
+        b=Pn5dKFYReh42Sc2DffXWTAZV8xHC6HEKdvjm3vHky5HV852csmcQOOSD6Z4BO8vdYG
+         4HB/wNITRtECneZXeElLkzbZrv/vnk9mnivv4IVXNdgqFw7YhcwajOXUtSGKH0/KjGjK
+         5OnR2nTjmDiXq2Lo9G/mHLCFvtjE9ouHQyGvUMcS5rZDIA94WppEzOx8grQiPeEHK8s1
+         5GSPB0/q+uHJMgxYzSRefmTdAUN7p1iNc5wnAw3/Q0bRViahatyq0eYCeCr55uWtuc7+
+         tF5AZ54eSYQpEINbS8B4NajdrZzu5VJ7feJdhxmijPtYM9Sr8SYwwkBLA5F2urGOjLf8
+         LbIw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1779878490; x=1780483290;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:x-gm-gg:x-gm-message-state:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=qdqmoM1OkQyLdvnI4OT+vmr9+0QhZY9CVzoqJx7+exE=;
+        b=F0wVJlpKlhWwTNTSnA4x1+vR45YQbohSvoj3MqDQzcuNJKZ8sDt2u2RsDVGl2RH514
+         iDq9+lx4tA/Dtv5twSnJFbppG/zBZVtPeO155bKUoF35yPCDWe7J90a7o9SO0d/8t9AK
+         bn+FitkfZDiWbBI1QeTZTE81CeM+kfhSO1sJg2l8ssncGzOL89RrJVsefhNyp59jHng7
+         gi/CQcRvUtMZYeTfYaq+OZdnf3+QYJDeZ+8oJ1dkf157DQsTt98zHyUbO9H2kG9rb0WN
+         KeL9CkN8/hRPA3temeC85IlTnJiVuPuzNA4Jyaeo44fkO1t+74rw4rujfL3lt8rVdtC8
+         yDxA==
+X-Gm-Message-State: AOJu0YxDwiqzRIKhoqqYxChnqyUTdbe7habH1hgk3xq/ZFe2yzjOZhyD
+	pVON8ah2mnv1OuQFuVstAHGkl24ux43N17P3cTx7dGSJq13ERUL69HGOz06HuYsS
+X-Gm-Gg: Acq92OHe+ZCkaHxqzcoRU4fteGPYAh0u0ANchAZcoKCF4JDEDyR4UuQxEcqAEgRfCB/
+	tg7HhhRIJeSSrRj3ns+HlJ6dF5a8VmU2E1ufvBjEtB6XKpql8E1r0jJ887FwTPzhtS3dqbClTOh
+	DnCwLuwQddMAKQ1Izpo0k0Utblf6V5VtcrIeY7nMJKwTyCnjTTGEfUPlD6uqJxGSqgjD6dWEe/+
+	id5MsgxEvmzITE8nU/xjX5YJiEhqjwRirRSPw03IJHb+v3lMOfRN9tcPTBbmhv2gvA6DE7ld7g0
+	t0UInxlzPve3QaMrZijb7Pm5YpFpFjx90EHU82TUlF4UhL9u0fhgStdRd30VZWcR5hQa3htovpa
+	gtbpyIvbapVnflwCzgEQi9Xq0PtMJX0ESVtdt94psBU9hpq8s4MJGSmwjTtEwO5hNKxq8/Y1ieu
+	Ef2bR2hCRNaTOMMGXpvM5ecbF0p+3DbekSwVZzvDd0ZxSLGqxpCiUXwqDYucP8PR/UvxjesKd+q
+	xAwmgEVKdLt
+X-Received: by 2002:a05:6a00:66c5:b0:841:dcb5:e6f2 with SMTP id d2e1a72fcca58-841dcb5ea0fmr1389110b3a.23.1779878489723;
+        Wed, 27 May 2026 03:41:29 -0700 (PDT)
+Return-Path: <caldiminternship@gmail.com>
+Received: from [127.0.0.1] ([103.82.211.223])
+        by smtp.gmail.com with ESMTPSA id d2e1a72fcca58-841d70f1ed8sm2457530b3a.43.2026.05.27.03.41.28
+        for <john.doe@example.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Wed, 27 May 2026 03:41:29 -0700 (PDT)
+From: caldiminternship@gmail.com
+To: john.doe@example.com
+Subject: Re: Low Confidence Out of Schedule Inquiry
+Message-ID: <4b65a0e1-b1ad-e0d2-3f7e-f1347411c4c2@gmail.com>
+Content-Transfer-Encoding: quoted-printable
+Date: Wed, 27 May 2026 10:41:26 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
