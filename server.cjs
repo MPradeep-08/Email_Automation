@@ -23,7 +23,7 @@ const app = express();
 
 // Lock CORS origin to local React Vite application URL for security
 app.use(cors({
-  origin: 'http://localhost:5173'
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173']
 }));
 app.use(express.json());
 
@@ -54,13 +54,45 @@ db.exec(`
     attachments TEXT DEFAULT '[]',
     status TEXT,
     ai_suggested_reply TEXT,
-    replies TEXT DEFAULT '[]'
+    replies TEXT DEFAULT '[]',
+    ai_reasoning TEXT,
+    ai_suggested_reply_original TEXT,
+    confidence REAL
   );
 
   CREATE TABLE IF NOT EXISTS processed_uids (
     uid INTEGER PRIMARY KEY
   );
+
+  CREATE TABLE IF NOT EXISTS sender_profiles (
+    sender_email TEXT PRIMARY KEY,
+    extracted_name TEXT,
+    ticket_count INTEGER DEFAULT 0,
+    first_seen TEXT,
+    last_seen TEXT,
+    preferred_department TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id TEXT,
+    action TEXT,
+    actor TEXT,
+    payload TEXT,
+    created_at TEXT
+  );
 `);
+
+// Backwards-compatible column migrations
+try {
+  db.prepare("ALTER TABLE tickets ADD COLUMN ai_reasoning TEXT").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE tickets ADD COLUMN ai_suggested_reply_original TEXT").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE tickets ADD COLUMN confidence REAL").run();
+} catch (e) {}
 
 // Concurrency Polling lock to prevent race conditions
 let isPolling = false;
@@ -84,6 +116,78 @@ function extractNameFromEmail(email) {
     .split(/[\._-]/)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+// Helper to log state changes and mutations to audit_logs
+function logAction(ticketId, action, actor, payload) {
+  try {
+    db.prepare(`
+      INSERT INTO audit_logs (ticket_id, action, actor, payload, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(ticketId, action, actor, payload, new Date().toISOString());
+  } catch (err) {
+    console.error(`❌ [Audit Log Error] Failed to log action ${action} for ticket ${ticketId}:`, err);
+  }
+}
+
+// Helper to update repeat senders memory profiles
+function upsertSenderProfile(senderEmail, extractedName, department) {
+  try {
+    const now = new Date().toISOString();
+    const existing = db.prepare('SELECT * FROM sender_profiles WHERE sender_email = ?').get(senderEmail);
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO sender_profiles (sender_email, extracted_name, ticket_count, first_seen, last_seen, preferred_department)
+        VALUES (?, ?, 1, ?, ?, ?)
+      `).run(senderEmail, extractedName, now, now, department);
+    } else {
+      const newCount = existing.ticket_count + 1;
+      // Find preferred department dynamically based on ticket history
+      const ticketsList = db.prepare('SELECT assigned_department FROM tickets WHERE sender_email = ?').all(senderEmail);
+      const freq = { [department]: 1 };
+      for (const t of ticketsList) {
+        freq[t.assigned_department] = (freq[t.assigned_department] || 0) + 1;
+      }
+      let preferred = department;
+      let maxCount = 0;
+      for (const [dept, count] of Object.entries(freq)) {
+        if (count > maxCount) {
+          maxCount = count;
+          preferred = dept;
+        }
+      }
+      db.prepare(`
+        UPDATE sender_profiles
+        SET extracted_name = ?, ticket_count = ?, last_seen = ?, preferred_department = ?
+        WHERE sender_email = ?
+      `).run(extractedName, newCount, now, preferred, senderEmail);
+    }
+  } catch (err) {
+    console.error(`❌ [Sender Profile Error] Failed to upsert profile for ${senderEmail}:`, err);
+  }
+}
+
+// Helper to transmit outbound replies via SMTP Nodemailer
+async function sendEmailSMTP(toEmail, subject, bodyText) {
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+  
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: emailUser,
+      pass: emailPass
+    }
+  });
+
+  const mailOptions = {
+    from: emailUser,
+    to: toEmail,
+    subject: subject.startsWith('Re:') ? subject : `Re: ${subject}`,
+    text: bodyText
+  };
+
+  await transporter.sendMail(mailOptions);
 }
 
 // Helper to make Groq API calls using global fetch
@@ -115,10 +219,8 @@ async function callGroq(messages, model = 'llama-3.3-70b-versatile', responseFor
 
   const data = await res.json();
   return data.choices[0].message.content;
-}
-
-// Analyze Email using Groq AI
-async function analyzeEmailWithGroq(senderEmail, senderName, subject, bodyText) {
+}// Analyze Email using Groq AI
+async function analyzeEmailWithGroq(senderEmail, senderName, subject, bodyText, senderHistoryContext = "") {
   const messages = [
     {
       role: 'system',
@@ -127,12 +229,16 @@ Analyze the incoming email and return a JSON object with the following propertie
 - "assigned_department": Must be exactly one of: "HR/Internship", "Billing", "Technical", or "General".
 - "ai_requirements": A clean, bulleted list of 2-4 requirements extracted from the email (plain text).
 - "ai_suggested_reply": A professional, polite response draft addressing the client by name (if known, else just "Hi there") and signing off as the Caldim Team. Ensure it directly addresses their questions.
+- "ai_reasoning": A single sentence explaining why this department was chosen and the tone of the draft reply.
+- "confidence": A decimal number between 0.0 and 1.0 representing your confidence in this classification and draft reply.
 
 You must respond with ONLY a valid raw JSON object. Do not include markdown code block formatting (like \`\`\`json) or any conversational text.`
     },
     {
       role: 'user',
-      content: `Sender: ${senderName} <${senderEmail}>
+      content: `${senderHistoryContext}
+
+Sender: ${senderName} <${senderEmail}>
 Subject: ${subject}
 Message Body:
 ${bodyText}`
@@ -221,8 +327,9 @@ async function pollInbox() {
     const insertTicketStmt = db.prepare(`
       INSERT INTO tickets (
         id, timestamp, sender_email, extracted_name, email_subject, raw_body, 
-        ai_requirements, assigned_department, attachments, status, ai_suggested_reply, replies
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ai_requirements, assigned_department, attachments, status, ai_suggested_reply, replies,
+        ai_reasoning, ai_suggested_reply_original, confidence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const message of messages) {
@@ -242,11 +349,38 @@ async function pollInbox() {
       const senderName = fromValue ? fromValue.name || extractNameFromEmail(senderEmail) : 'Unknown Contact';
       const bodyText = parsed.text || parsed.html || '';
 
-      // Extract and sanitize attachments
+      // Calculate sequential ticket index first to prefix attachments and use in db
+      const ticketCount = getTicketCountStmt.get().count;
+      const ticketId = `TKT-2026-${String(ticketCount + 1).padStart(3, '0')}`;
+
+      // Extract and sanitize attachments with size limits and executable blocks
       const attachmentsList = [];
       if (parsed.attachments) {
         for (const att of parsed.attachments) {
-          const safeName = sanitizeFilename(att.filename);
+          // Check file size: limit is 10MB (10 * 1024 * 1024 bytes)
+          if (att.size > 10 * 1024 * 1024) {
+            console.warn(`⚠️ [Attachment Blocked] File "${att.filename}" exceeds 10MB limit. Skipping download.`);
+            continue;
+          }
+
+          // Check executable whitelist/blocklist
+          const ext = path.extname(att.filename || '').toLowerCase();
+          const blockedExtensions = ['.exe', '.bat', '.cmd', '.sh', '.msi', '.js', '.scr', '.vbs', '.jar', '.com'];
+          const blockedMimeTypes = [
+            'application/x-msdownload',
+            'application/x-sh',
+            'application/javascript',
+            'application/x-bat',
+            'application/x-msdos-program'
+          ];
+          
+          if (blockedExtensions.includes(ext) || blockedMimeTypes.includes(att.contentType)) {
+            console.warn(`⚠️ [Attachment Blocked] File "${att.filename}" has blocked extension/MIME type. Skipping download.`);
+            continue;
+          }
+
+          const cleanBase = sanitizeFilename(att.filename);
+          const safeName = `${ticketId}_${cleanBase}`;
           const fileSizeMB = (att.size / (1024 * 1024)).toFixed(2) + " MB";
           const filePath = path.join(ATTACHMENTS_DIR, safeName);
           
@@ -260,11 +394,24 @@ async function pollInbox() {
         }
       }
 
+      // Read sender's repeat history profile
+      const profile = db.prepare('SELECT * FROM sender_profiles WHERE sender_email = ?').get(senderEmail);
+      let senderHistoryContext = "";
+      if (profile) {
+        senderHistoryContext = `Sender History Context:
+- Previous tickets from this sender: ${profile.ticket_count}
+- First seen: ${profile.first_seen}
+- Last seen: ${profile.last_seen}
+- Preferred department: ${profile.preferred_department}`;
+      } else {
+        senderHistoryContext = "Sender History Context: This is a new sender (first contact).";
+      }
+
       // Route department & write auto-draft (with Groq AI or Local Heuristics fallback)
-      let dept, requirements, suggestedReply;
+      let dept, requirements, suggestedReply, reasoning, confidence;
       try {
-        console.log(`🧠 [GROQ AI] Analyzing incoming email from ${senderEmail}...`);
-        const aiAnalysis = await analyzeEmailWithGroq(senderEmail, senderName, subject, bodyText);
+        console.log(`🧠 [GROQ AI] Analyzing incoming email from ${senderEmail} with history context...`);
+        const aiAnalysis = await analyzeEmailWithGroq(senderEmail, senderName, subject, bodyText, senderHistoryContext);
         dept = aiAnalysis.assigned_department || 'General';
         
         const reqs = aiAnalysis.ai_requirements || '';
@@ -280,35 +427,42 @@ async function pollInbox() {
         } else {
           suggestedReply = String(suggestedReply);
         }
+
+        reasoning = aiAnalysis.ai_reasoning || `Routed to ${dept} based on keyword mapping.`;
+        confidence = parseFloat(aiAnalysis.confidence) || 0.0;
       } catch (err) {
         console.log("ℹ [Groq Bypass] Falling back to local parser. Reason:", err.message);
         dept = classifyDepartment(subject, bodyText);
         requirements = generateRequirements(subject, bodyText, dept);
         suggestedReply = generateSuggestedReply(senderEmail, subject, bodyText, dept);
+        reasoning = `Bypassed AI analysis. Routed to ${dept} based on local keyword rules.`;
+        confidence = 0.0;
       }
 
-      // Calculate sequential ticket index
-      const ticketCount = getTicketCountStmt.get().count;
-      const ticketId = `TKT-2026-${String(ticketCount + 1).padStart(3, '0')}`;
+      let status = 'Pending Review';
+      let repliesList = [];
+      let autoSent = false;
+
+      // Auto-Send Rule: confidence > 0.90, assigned_department is not Billing, and SMTP credentials exist
+      if (confidence > 0.90 && dept !== 'Billing') {
+        try {
+          console.log(`🚀 [Auto-Send] Confidence (${confidence}) > 0.90 for ticket ${ticketId}. Sending automatic reply...`);
+          await sendEmailSMTP(senderEmail, subject, suggestedReply);
+          status = 'Sent';
+          repliesList.push({
+            replyText: suggestedReply,
+            sentAt: new Date().toISOString()
+          });
+          autoSent = true;
+          console.log(`✔ [Auto-Send] SMTP reply successfully sent to ${senderEmail}`);
+        } catch (err) {
+          console.error(`❌ [Auto-Send Error] Failed to auto-send SMTP reply for ticket ${ticketId}:`, err.message);
+          // Keep as 'Pending Review' so human can review
+        }
+      }
 
       // Insert transactionally
       const transaction = db.transaction(() => {
-        console.log("DB INSERT PARAM TYPES:", {
-          ticketId: typeof ticketId,
-          date: typeof (parsed.date ? parsed.date.toISOString() : null),
-          senderEmail: typeof senderEmail,
-          senderName: typeof senderName,
-          subject: typeof subject,
-          bodyText: typeof bodyText,
-          requirements: typeof requirements,
-          requirementsIsArray: Array.isArray(requirements),
-          dept: typeof dept,
-          attachmentsList: typeof JSON.stringify(attachmentsList),
-          status: 'string',
-          suggestedReply: typeof suggestedReply,
-          replies: 'string',
-          uid: typeof uid
-        });
         insertTicketStmt.run(
           ticketId, 
           parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
@@ -319,15 +473,34 @@ async function pollInbox() {
           requirements,
           dept,
           JSON.stringify(attachmentsList),
-          'Pending Review',
+          status,
           suggestedReply,
-          JSON.stringify([])
+          JSON.stringify(repliesList),
+          reasoning,
+          suggestedReply,
+          confidence
         );
         insertUidStmt.run(uid);
+
+        // Upsert sender memory profile
+        upsertSenderProfile(senderEmail, senderName, dept);
+
+        // Write audit log rows
+        db.prepare(`
+          INSERT INTO audit_logs (ticket_id, action, actor, payload, created_at)
+          VALUES (?, 'Ingested', 'System', ?, ?)
+        `).run(ticketId, reasoning, new Date().toISOString());
+
+        if (autoSent) {
+          db.prepare(`
+            INSERT INTO audit_logs (ticket_id, action, actor, payload, created_at)
+            VALUES (?, 'Approved', 'System', ?, ?)
+          `).run(ticketId, suggestedReply, new Date().toISOString());
+        }
       });
       transaction();
 
-      console.log(`📥 [INGESTION] Processed email from ${senderEmail} (Assigned to: ${dept})`);
+      console.log(`📥 [INGESTION] Processed email from ${senderEmail} (Assigned to: ${dept}, Status: ${status})`);
     }
 
     await connection.end();
@@ -391,35 +564,154 @@ app.get('/api/tickets', (req, res) => {
 });
 
 // Mock ingestion trigger for sandbox simulator
-app.post('/api/tickets/mock', (req, res) => {
+app.post('/api/tickets/mock', async (req, res) => {
   const { senderEmail, subject, body, attachments } = req.body;
+  
   const ticketCount = db.prepare('SELECT COUNT(*) as count FROM tickets').get().count;
   const ticketId = `TKT-2026-${String(ticketCount + 1).padStart(3, '0')}`;
   const name = extractNameFromEmail(senderEmail);
-  const dept = classifyDepartment(subject, body);
-  const requirements = generateRequirements(subject, body, dept);
-  const suggestedReply = generateSuggestedReply(senderEmail, subject, body, dept);
+
+  // Retrieve sender history context
+  const profile = db.prepare('SELECT * FROM sender_profiles WHERE sender_email = ?').get(senderEmail);
+  let senderHistoryContext = "";
+  if (profile) {
+    senderHistoryContext = `Sender History Context:
+- Previous tickets from this sender: ${profile.ticket_count}
+- First seen: ${profile.first_seen}
+- Last seen: ${profile.last_seen}
+- Preferred department: ${profile.preferred_department}`;
+  } else {
+    senderHistoryContext = "Sender History Context: This is a new sender (first contact).";
+  }
+
+  let dept, requirements, suggestedReply, reasoning, confidence;
+  try {
+    console.log(`🧠 [GROQ AI] [MOCK] Analyzing mock email from ${senderEmail}...`);
+    const aiAnalysis = await analyzeEmailWithGroq(senderEmail, name, subject, body, senderHistoryContext);
+    dept = aiAnalysis.assigned_department || 'General';
+    
+    const reqs = aiAnalysis.ai_requirements || '';
+    if (Array.isArray(reqs)) {
+      requirements = reqs.map((r, i) => `${i + 1}. ${r}`).join('\n');
+    } else {
+      requirements = String(reqs);
+    }
+    
+    suggestedReply = aiAnalysis.ai_suggested_reply || '';
+    if (typeof suggestedReply === 'object') {
+      suggestedReply = JSON.stringify(suggestedReply);
+    } else {
+      suggestedReply = String(suggestedReply);
+    }
+
+    reasoning = aiAnalysis.ai_reasoning || `Routed to ${dept} based on keyword mapping.`;
+    confidence = parseFloat(aiAnalysis.confidence) || 0.0;
+  } catch (err) {
+    console.log("ℹ [Groq Bypass] [MOCK] Falling back to local parser. Reason:", err.message);
+    dept = classifyDepartment(subject, body);
+    requirements = generateRequirements(subject, body, dept);
+    suggestedReply = generateSuggestedReply(senderEmail, subject, body, dept);
+    reasoning = `Bypassed AI analysis. Routed to ${dept} based on local keyword rules.`;
+    confidence = 0.0;
+  }
+
+  // Handle mock attachments
+  const attachmentsList = [];
+  if (attachments && Array.isArray(attachments)) {
+    for (const att of attachments) {
+      const sizeBytes = att.sizeBytes || (1 * 1024 * 1024);
+      if (sizeBytes > 10 * 1024 * 1024) {
+        console.warn(`⚠️ [Attachment Blocked] [MOCK] File "${att.name}" exceeds 10MB size limit.`);
+        continue;
+      }
+
+      const ext = path.extname(att.name || '').toLowerCase();
+      const blockedExtensions = ['.exe', '.bat', '.cmd', '.sh', '.msi', '.js', '.scr', '.vbs', '.jar', '.com'];
+      if (blockedExtensions.includes(ext)) {
+        console.warn(`⚠️ [Attachment Blocked] [MOCK] File "${att.name}" has blocked extension.`);
+        continue;
+      }
+
+      const cleanName = sanitizeFilename(att.name);
+      const safeName = `${ticketId}_${cleanName}`;
+      const fileSizeMB = (sizeBytes / (1024 * 1024)).toFixed(2) + " MB";
+      
+      const filePath = path.join(ATTACHMENTS_DIR, safeName);
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, att.content || "Mock attachment content placeholder.");
+      }
+
+      attachmentsList.push({
+        name: safeName,
+        size: fileSizeMB,
+        type: att.type || 'application/octet-stream'
+      });
+    }
+  }
+
+  let status = 'Pending Review';
+  let repliesList = [];
+  let autoSent = false;
+
+  if (confidence > 0.90 && dept !== 'Billing') {
+    try {
+      console.log(`🚀 [Auto-Send] [MOCK] Confidence (${confidence}) > 0.90 for ticket ${ticketId}. Sending automatic reply...`);
+      await sendEmailSMTP(senderEmail, subject, suggestedReply);
+      status = 'Sent';
+      repliesList.push({
+        replyText: suggestedReply,
+        sentAt: new Date().toISOString()
+      });
+      autoSent = true;
+    } catch (err) {
+      console.error(`❌ [Auto-Send Error] [MOCK] Failed to auto-send SMTP reply for ticket ${ticketId}:`, err.message);
+    }
+  }
 
   try {
-    db.prepare(`
-      INSERT INTO tickets (
-        id, timestamp, sender_email, extracted_name, email_subject, raw_body, 
-        ai_requirements, assigned_department, attachments, status, ai_suggested_reply, replies
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      ticketId,
-      new Date().toISOString(),
-      senderEmail,
-      name,
-      subject,
-      body,
-      requirements,
-      dept,
-      JSON.stringify(attachments || []),
-      'Pending Review',
-      suggestedReply,
-      JSON.stringify([])
-    );
+    const transaction = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO tickets (
+          id, timestamp, sender_email, extracted_name, email_subject, raw_body, 
+          ai_requirements, assigned_department, attachments, status, ai_suggested_reply, replies,
+          ai_reasoning, ai_suggested_reply_original, confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        ticketId,
+        new Date().toISOString(),
+        senderEmail,
+        name,
+        subject,
+        body,
+        requirements,
+        dept,
+        JSON.stringify(attachmentsList),
+        status,
+        suggestedReply,
+        JSON.stringify(repliesList),
+        reasoning,
+        suggestedReply,
+        confidence
+      );
+
+      // Upsert sender profile
+      upsertSenderProfile(senderEmail, name, dept);
+
+      // Add audit logs
+      db.prepare(`
+        INSERT INTO audit_logs (ticket_id, action, actor, payload, created_at)
+        VALUES (?, 'Ingested', 'System', ?, ?)
+      `).run(ticketId, reasoning, new Date().toISOString());
+
+      if (autoSent) {
+        db.prepare(`
+          INSERT INTO audit_logs (ticket_id, action, actor, payload, created_at)
+          VALUES (?, 'Approved', 'System', ?, ?)
+        `).run(ticketId, suggestedReply, new Date().toISOString());
+      }
+    });
+    transaction();
+
     res.json({ success: true, ticketId });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -437,27 +729,8 @@ app.post('/api/tickets/:id/approve', async (req, res) => {
     return res.status(404).json({ error: "Ticket not found" });
   }
 
-  const emailUser = process.env.EMAIL_USER;
-  const emailPass = process.env.EMAIL_PASS;
-
-  // Send SMTP reply via NodeMailer
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: emailUser,
-      pass: emailPass
-    }
-  });
-
-  const mailOptions = {
-    from: emailUser,
-    to: ticket.sender_email,
-    subject: `Re: ${ticket.email_subject}`,
-    text: replyText
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
+    await sendEmailSMTP(ticket.sender_email, ticket.email_subject, replyText);
     console.log(`✉ [SMTP] Reply sent to ${ticket.sender_email}`);
   } catch (err) {
     console.error("❌ [SMTP Error] Failed to send email: ", err.message);
@@ -476,6 +749,9 @@ app.post('/api/tickets/:id/approve', async (req, res) => {
     db.prepare('UPDATE tickets SET status = ?, ai_suggested_reply = ?, replies = ? WHERE id = ?')
       .run('Sent', replyText, JSON.stringify(updatedReplies), id);
       
+    // Log action to audit logs
+    logAction(id, 'Approved', 'Human', replyText);
+
     res.json({ id, status: 'Sent', replies: updatedReplies });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -494,6 +770,10 @@ app.post('/api/tickets/:id/ignore', (req, res) => {
   try {
     db.prepare("UPDATE tickets SET status = 'Ignored' WHERE id = ?").run(id);
     console.log(`🚫 [ARCHIVE] Ticket ${id} ignored and archived.`);
+    
+    // Log action to audit logs
+    logAction(id, 'Ignored', 'Human', 'Ticket Ignored');
+
     res.json({ id, status: 'Ignored' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -534,10 +814,25 @@ Current Draft Reply to Polish:
   try {
     console.log(`🧠 [GROQ AI] Enhancing draft response for ticket ${id}...`);
     const enhancedReply = await callGroq(messages, 'llama-3.3-70b-versatile');
+    
+    // Log action to audit logs
+    logAction(id, 'Enhanced', 'Human', 'AI draft enhancement generated');
+
     res.json({ enhancedReply: enhancedReply.trim() });
   } catch (err) {
     console.error("❌ [Groq Enhance Error]: ", err.message);
     res.status(500).json({ error: "Failed to enhance reply: " + err.message });
+  }
+});
+
+// Get audit trail logs for a ticket
+app.get('/api/tickets/:id/audit', (req, res) => {
+  const { id } = req.params;
+  try {
+    const logs = db.prepare('SELECT * FROM audit_logs WHERE ticket_id = ? ORDER BY created_at ASC').all(id);
+    res.json({ logs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

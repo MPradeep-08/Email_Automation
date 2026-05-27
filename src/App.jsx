@@ -7,6 +7,8 @@ import { TerminalLog } from './components/TerminalLog';
 import { Sparkles, ArrowRight, CheckCircle, RefreshCw, Terminal, AlertCircle, X } from 'lucide-react';
 import { cn } from './utils';
 
+const BACKEND_URL = window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:5000' : 'http://localhost:5000';
+
 export default function App() {
   const [tickets, setTickets] = useState([]);
   const [pendingTickets, setPendingTickets] = useState([]);
@@ -40,7 +42,7 @@ export default function App() {
   const fetchTickets = async (targetPage = page, showLoader = false) => {
     if (showLoader) setIsRefreshing(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/tickets?page=${targetPage}&limit=10`);
+      const res = await fetch(`${BACKEND_URL}/api/tickets?page=${targetPage}&limit=10`);
       if (res.ok) {
         const data = await res.json();
         setTickets(data.tickets || []);
@@ -63,7 +65,7 @@ export default function App() {
     setIsRefreshing(true);
     showToast("Inbox sync requested. Contacting Gmail server...", "info");
     try {
-      const res = await fetch('http://localhost:5000/api/poll', { method: 'POST' });
+      const res = await fetch(`${BACKEND_URL}/api/poll`, { method: 'POST' });
       if (res.status === 409) {
         showToast("Inbox polling is already in progress.", "info");
       } else if (res.ok) {
@@ -101,7 +103,7 @@ export default function App() {
 
   const handleApproveReply = async (ticketId, updatedReply) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/tickets/${ticketId}/approve`, {
+      const res = await fetch(`${BACKEND_URL}/api/tickets/${ticketId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ replyText: updatedReply })
@@ -121,7 +123,7 @@ export default function App() {
 
   const handleIgnoreReply = async (ticketId) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/tickets/${ticketId}/ignore`, {
+      const res = await fetch(`${BACKEND_URL}/api/tickets/${ticketId}/ignore`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -168,7 +170,7 @@ export default function App() {
       await new Promise(resolve => setTimeout(resolve, 1200));
 
       setCurrentStage('STORE');
-      const res = await fetch('http://localhost:5000/api/tickets/mock', {
+      const res = await fetch(`${BACKEND_URL}/api/tickets/mock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
