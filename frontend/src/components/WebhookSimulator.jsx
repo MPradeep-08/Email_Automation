@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Send, Loader2, Paperclip, Check } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -6,6 +6,30 @@ const MOCK_ATTACHMENTS = [
   { name: 'resume.pdf', size: '1.2 MB', type: 'application/pdf' },
   { name: 'screenshot.png', size: '850 KB', type: 'image/png' },
   { name: 'contract.docx', size: '420 KB', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+];
+
+const TEMPLATES = [
+  {
+    name: '📄 Internship',
+    senderEmail: 'jdoe.university@edu.com',
+    subject: 'Inquiry regarding 2026 Caldim Internship',
+    body: 'Hello,\n\nI am reaching out to ask if the Caldim Internship program for summer 2026 is still accepting applications. I have attached my resume and structurally detailed project portfolio for your review.\n\nThank you,\nJohn Doe',
+    attachments: ['resume.pdf']
+  },
+  {
+    name: '💳 Billing AP',
+    senderEmail: 'billing.office@clientcorp.com',
+    subject: 'Discrepancy in invoice INV-2026-089',
+    body: 'Hello Caldim Team,\n\nOur accounts payable flagged a potential double-billing on our latest invoice INV-2026-089. Could you please check the transaction log and adjust this charge?\n\nRegards,\nSarah Jenkins',
+    attachments: ['contract.docx']
+  },
+  {
+    name: '🛠️ Support Core',
+    senderEmail: 'tech.lead@hardwarefirm.com',
+    subject: 'Technical support request: load specification calculation error',
+    body: 'Hi support,\n\nWe are facing a parsing error when uploading our structural load specification files. The calculations seem to timeout. Please check this logs details.\n\nThanks,\nRobert Chen',
+    attachments: ['screenshot.png']
+  }
 ];
 
 export function WebhookSimulator({ onSimulate, isSimulating, currentStage }) {
@@ -43,12 +67,36 @@ export function WebhookSimulator({ onSimulate, isSimulating, currentStage }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200/60 p-6 h-full flex flex-col">
-      <div className="mb-6 border-b border-slate-100 pb-4">
-        <h2 className="text-xl font-bold text-slate-800">Email Webhook Simulator</h2>
+      <div className="mb-4 border-b border-slate-100 pb-3">
+        <h2 className="text-lg font-bold text-slate-800">Email Webhook Simulator</h2>
         <p className="text-xs text-slate-500 mt-1 font-medium">Inject a mock payload to test parsing, routing, and auto-drafting.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex-1 flex flex-col space-y-4">
+      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 mb-3 shadow-inner">
+        <label className="block text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mb-1.5">Load Simulation Preset Template</label>
+        <div className="flex gap-2">
+          {TEMPLATES.map((t, idx) => (
+            <button
+              type="button"
+              key={idx}
+              disabled={isSimulating}
+              onClick={() => {
+                setFormData({
+                  senderEmail: t.senderEmail,
+                  subject: t.subject,
+                  body: t.body
+                });
+                setSelectedAttachments(t.attachments);
+              }}
+              className="flex-1 py-1.5 px-2 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-900 rounded-lg text-[10px] font-bold bg-white shadow-sm transition-all active:scale-95 disabled:opacity-55"
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col space-y-3">
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">1. Mock Sender Address</label>
           <input 

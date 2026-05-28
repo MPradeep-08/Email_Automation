@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, User, Mail, Calendar, Building, Clock, ArrowRight, ChevronRight, MessageSquare } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, User, Mail, Calendar, Clock, ChevronRight, MessageSquare } from 'lucide-react';
 import { cn } from '../utils';
 
 const BACKEND_URL = window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:5000' : 'http://localhost:5000';
@@ -82,7 +82,7 @@ export function ContactsCRM({ onSelectTicket }) {
             setCustomUntil('');
             setExpiryType('preset');
           }
-        } catch (e) {
+        } catch {
           setCustomUntil('');
           setExpiryType('preset');
         }
@@ -210,7 +210,7 @@ export function ContactsCRM({ onSelectTicket }) {
         .filter(d => scheduleDays.includes(d.value))
         .map(d => d.label);
       
-      let dayDesc = "";
+      let dayDesc;
       if (activeLabels.length === 7) {
         dayDesc = "Every day";
       } else if (activeLabels.length === 5 && !scheduleDays.includes('0') && !scheduleDays.includes('6')) {
@@ -259,7 +259,9 @@ export function ContactsCRM({ onSelectTicket }) {
         if (customUntil) {
           try {
             currentCustomUntilIso = new Date(customUntil).toISOString();
-          } catch (e) {}
+          } catch {
+            // Invalid date, ignore
+          }
         }
         if (currentCustomUntilIso !== dbUntil) return true;
       }

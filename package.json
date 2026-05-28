@@ -1,41 +1,19 @@
 {
-  "name": "email-automation",
+  "name": "email-automation-workspace",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "better-sqlite3": "^12.10.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "imap-simple": "^5.1.0",
-    "mailparser": "^3.9.8",
-    "nodemailer": "^8.0.9",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "dev": "concurrently \"npm run dev --workspace=frontend\" \"npm run start --workspace=backend\"",
+    "build:frontend": "npm run build --workspace=frontend",
+    "lint:frontend": "npm run lint --workspace=frontend",
+    "start:backend": "npm run start --workspace=backend",
+    "test:unit": "npm run test:unit --workspace=backend",
+    "test:integration": "npm run test:integration --workspace=backend"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "autoprefixer": "^10.5.0",
-    "clsx": "^2.1.1",
-    "eslint": "^10.3.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.6.0",
-    "lucide-react": "^1.16.0",
-    "postcss": "^8.5.15",
-    "tailwind-merge": "^3.6.0",
-    "tailwindcss": "^3.4.19",
-    "vite": "^8.0.12"
+    "concurrently": "^8.2.2"
   }
 }

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, FileText, Paperclip, CheckCircle2, User, Mail, Tag, Clock, Send, Ban, Loader2, Sparkles, Check, HelpCircle, FileDiff, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, FileText, Paperclip, User, Mail, Tag, Clock, Send, Ban, Loader2, Sparkles, Check, HelpCircle, FileDiff } from 'lucide-react';
 import { cn, diffWords } from '../utils';
 
 const BACKEND_URL = window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:5000' : 'http://localhost:5000';
@@ -20,7 +20,7 @@ export function TicketDrawer({ ticket, isOpen, onClose, onApprove, onIgnore }) {
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
 
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = useCallback(async () => {
     if (!ticket) return;
     setIsLoadingAudit(true);
     try {
@@ -34,7 +34,7 @@ export function TicketDrawer({ ticket, isOpen, onClose, onApprove, onIgnore }) {
     } finally {
       setIsLoadingAudit(false);
     }
-  };
+  }, [ticket]);
 
   useEffect(() => {
     if (isOpen && ticket) {
@@ -71,7 +71,7 @@ export function TicketDrawer({ ticket, isOpen, onClose, onApprove, onIgnore }) {
         setIsTyping(false);
       }
     }
-  }, [ticket, isOpen]);
+  }, [ticket, isOpen, fetchAuditLogs]);
 
   if (!ticket && !isOpen) return null;
 

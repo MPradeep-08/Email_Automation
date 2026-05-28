@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Search, ChevronRight, Inbox, Paperclip, Filter, ChevronDown, ChevronLeft, ArrowUpDown } from 'lucide-react';
 import { cn } from '../utils';
 

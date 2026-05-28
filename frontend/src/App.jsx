@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { DataGrid } from './components/DataGrid';
 import { TicketDrawer } from './components/TicketDrawer';
@@ -68,7 +68,7 @@ export default function App() {
   };
 
   // Fetch tickets function
-  const fetchTickets = async (targetPage = page, showLoader = false) => {
+  const fetchTickets = useCallback(async (targetPage = page, showLoader = false) => {
     if (showLoader) setIsRefreshing(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/tickets?page=${targetPage}&limit=10`);
@@ -87,7 +87,7 @@ export default function App() {
     } finally {
       if (showLoader) setIsRefreshing(false);
     }
-  };
+  }, [page]);
 
   // Poll server for mail fetch
   const triggerServerPoll = async () => {
@@ -118,7 +118,7 @@ export default function App() {
       fetchTickets(page, false);
     }, 5000);
     return () => clearInterval(timer);
-  }, [page]);
+  }, [page, fetchTickets]);
 
   // Maintain active selection updates if ticket details change
   useEffect(() => {
@@ -343,12 +343,62 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                 {pendingTickets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-slate-500 border border-dashed border-slate-200 rounded-xl bg-slate-50">
-                    <CheckCircle className="w-8 h-8 text-emerald-500 mb-2" />
-                    <p className="text-sm font-semibold text-slate-700">All Drafts Processed</p>
-                    <p className="text-xs">No pending messages in the queue.</p>
+                  <div className="flex flex-col items-center justify-center py-8 text-slate-500 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 px-6 text-center shadow-inner">
+                    <CheckCircle className="w-8 h-8 text-emerald-500 mb-2 animate-bounce" />
+                    <p className="text-sm font-bold text-slate-700">All Drafts Processed</p>
+                    <p className="text-xs text-slate-400 mb-6">No pending emails in the queue. Click a template below to instantly simulate an incoming email:</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl">
+                      <button
+                        type="button"
+                        onClick={() => handleSimulate({
+                          senderEmail: 'jdoe.university@edu.com',
+                          subject: 'Inquiry regarding 2026 Caldim Internship',
+                          body: 'Hello,\n\nI am reaching out to ask if the Caldim Internship program for summer 2026 is still accepting applications. I have attached my resume for your review.\n\nThank you,\nJohn Doe',
+                          attachments: [{ name: 'resume.pdf', sizeBytes: 1200000, type: 'application/pdf' }]
+                        })}
+                        disabled={isSimulating}
+                        className="p-4 bg-white hover:bg-indigo-50/40 border border-slate-250 hover:border-indigo-300 rounded-xl text-left text-xs font-semibold shadow-sm hover:shadow transition-all group flex flex-col gap-1.5 active:scale-95 disabled:opacity-50"
+                      >
+                        <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-full self-start">📄 Internship Preset</span>
+                        <span className="text-slate-800 font-extrabold truncate w-full mt-1">Internship Inquiry</span>
+                        <span className="text-[10px] text-slate-400 font-medium truncate w-full">From: jdoe.university@edu.com</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSimulate({
+                          senderEmail: 'billing.office@clientcorp.com',
+                          subject: 'Discrepancy in invoice INV-2026-089',
+                          body: 'Hello Caldim Team,\n\nOur accounts payable flagged a potential double-billing on our latest invoice INV-2026-089. Could you please check the transaction log and adjust this charge?\n\nRegards,\nSarah Jenkins',
+                          attachments: [{ name: 'invoice.pdf', sizeBytes: 54000, type: 'application/pdf' }]
+                        })}
+                        disabled={isSimulating}
+                        className="p-4 bg-white hover:bg-indigo-50/40 border border-slate-250 hover:border-indigo-300 rounded-xl text-left text-xs font-semibold shadow-sm hover:shadow transition-all group flex flex-col gap-1.5 active:scale-95 disabled:opacity-50"
+                      >
+                        <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full self-start">💳 Billing Preset</span>
+                        <span className="text-slate-800 font-extrabold truncate w-full mt-1">Invoice Discrepancy</span>
+                        <span className="text-[10px] text-slate-400 font-medium truncate w-full">From: billing.office@clientcorp.com</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSimulate({
+                          senderEmail: 'tech.lead@hardwarefirm.com',
+                          subject: 'Technical support request: load specification calculation error',
+                          body: 'Hi support,\n\nWe are facing a parsing error when uploading our structural load specification files. The calculations seem to timeout. Please check this logs details.\n\nThanks,\nRobert Chen',
+                          attachments: []
+                        })}
+                        disabled={isSimulating}
+                        className="p-4 bg-white hover:bg-indigo-50/40 border border-slate-250 hover:border-indigo-300 rounded-xl text-left text-xs font-semibold shadow-sm hover:shadow transition-all group flex flex-col gap-1.5 active:scale-95 disabled:opacity-50"
+                      >
+                        <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full self-start">🛠️ Support Preset</span>
+                        <span className="text-slate-800 font-extrabold truncate w-full mt-1">Technical Support</span>
+                        <span className="text-[10px] text-slate-400 font-medium truncate w-full">From: tech.lead@hardwarefirm.com</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   pendingTickets.map((t) => (

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, Sparkles, Cpu, Layers, HardDrive, Users, CheckSquare, Inbox, Smile, ShieldCheck, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Sparkles, Cpu, Layers, HardDrive, Inbox, Smile, ShieldCheck, Clock } from 'lucide-react';
 import { cn } from '../utils';
 
 const BACKEND_URL = window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:5000' : 'http://localhost:5000';

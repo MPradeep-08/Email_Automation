@@ -1,6 +1,4 @@
-import React from 'react';
-import { Activity, Mail, CheckCircle, AlertCircle, Inbox, Send } from 'lucide-react';
-import { cn } from '../utils';
+import { Activity, Mail, Inbox, Send } from 'lucide-react';
 
 export function Header({ metrics }) {
   return (
